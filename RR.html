@@ -1,0 +1,161 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Round Robin Animation</title>
+  <style>
+    body { font-family: sans-serif; background: #f0f4f8; padding: 20px; }
+    h1 { color: #333; }
+    #cpu, #queue, #gantt { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
+    .process {
+      padding: 10px 16px;
+      background: #4f46e5;
+      color: white;
+      border-radius: 8px;
+      font-weight: bold;
+      transition: transform 0.3s ease;
+    }
+    #cpu .process { background: #10b981; }
+    #gantt .process { background: #f59e0b; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    .label { font-weight: bold; margin-right: 10px; }
+    #metrics { margin-top: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #e2e8f0; }
+  </style>
+</head>
+<body>
+  <h1>Round Robin Scheduling Animation</h1>
+  <p><strong>Time Quantum:</strong> 3 units</p>
+
+  <div><span class="label">CPU:</span><div id="cpu"></div></div>
+  <div><span class="label">Queue:</span><div id="queue"></div></div>
+  <div><span class="label">Gantt Chart:</span><div id="gantt"></div></div>
+
+  <button onclick="startRR()">Run Animation</button>
+
+  <div id="metrics"></div>
+
+  <script>
+    const quantum = 3;
+    const processes = [
+      { id: 'P1', arrival: 0, burst: 5 },
+      { id: 'P2', arrival: 1, burst: 3 },
+      { id: 'P3', arrival: 2, burst: 8 },
+      { id: 'P4', arrival: 3, burst: 6 }
+    ];
+
+    let queue = [];
+    let time = 0;
+    let gantt = [];
+    let completed = [];
+
+    function renderQueue() {
+      const q = document.getElementById('queue');
+      q.innerHTML = '';
+      queue.forEach(p => {
+        const el = document.createElement('div');
+        el.className = 'process';
+        el.textContent = `${p.id} (${p.rem})`;
+        q.appendChild(el);
+      });
+    }
+
+    function renderCPU(proc) {
+      const cpu = document.getElementById('cpu');
+      cpu.innerHTML = '';
+      if (proc) {
+        const el = document.createElement('div');
+        el.className = 'process';
+        el.textContent = `${proc.id}`;
+        cpu.appendChild(el);
+      }
+    }
+
+    function renderGantt() {
+      const g = document.getElementById('gantt');
+      g.innerHTML = '';
+      gantt.forEach(p => {
+        const el = document.createElement('div');
+        el.className = 'process';
+        el.textContent = `${p.id} [${p.start}-${p.end}]`;
+        g.appendChild(el);
+      });
+    }
+
+    function renderMetrics() {
+      const m = document.getElementById('metrics');
+      let html = `<h2>Metrics</h2><table><tr>
+        <th>PID</th><th>Arrival</th><th>Burst</th><th>Completion</th>
+        <th>Turnaround</th><th>Waiting</th><th>Response</th></tr>`;
+      completed.forEach(p => {
+        const tat = p.ct - p.arrival;
+        const wt = tat - p.burst;
+        const rt = p.first - p.arrival;
+        html += `<tr><td>${p.id}</td><td>${p.arrival}</td><td>${p.burst}</td>
+          <td>${p.ct}</td><td>${tat}</td><td>${wt}</td><td>${rt}</td></tr>`;
+      });
+      html += '</table>';
+      m.innerHTML = html;
+    }
+
+    function startRR() {
+      queue = processes.map(p => ({
+        ...p, rem: p.burst, first: null, ct: null
+      }));
+      queue.sort((a,b) => a.arrival - b.arrival);
+      let ready = [];
+      let idx = 0;
+
+      function step() {
+        while (idx < queue.length && queue[idx].arrival <= time) {
+          ready.push(queue[idx]);
+          idx++;
+        }
+
+        if (ready.length === 0) {
+          time++;
+          step();
+          return;
+        }
+
+        const proc = ready.shift();
+        if (proc.first === null) proc.first = time;
+        const slice = Math.min(quantum, proc.rem);
+        renderCPU(proc);
+
+        setTimeout(() => {
+          proc.rem -= slice;
+          gantt.push({ id: proc.id, start: time, end: time + slice });
+          time += slice;
+
+          while (idx < queue.length && queue[idx].arrival <= time) {
+            ready.push(queue[idx]);
+            idx++;
+          }
+
+          if (proc.rem > 0) {
+            ready.push(proc);
+          } else {
+            proc.ct = time;
+            completed.push(proc);
+          }
+
+          renderQueue();
+          renderGantt();
+          renderCPU(null);
+
+          if (ready.length > 0 || idx < queue.length) {
+            setTimeout(step, 600);
+          } else {
+            renderMetrics();
+          }
+        }, 600);
+      }
+
+      renderQueue();
+      step();
+    }
+  </script>
+</body>
+</html>
